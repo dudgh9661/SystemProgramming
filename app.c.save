@@ -1,0 +1,136 @@
+#include <stdio.h>
+#include "ultrasonic.h"
+#include "servo.h"
+#include <unistd.h> 
+#include <pthread.h> 
+#include <stdbool.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <string.h>
+
+#define TOUCH_PATH "/dev/touch_dev"
+#define BUTTON_PATH "/dev/button_dev"
+#define BUFFER_LENGTH 256
+static char receive_button[BUFFER_LENGTH]; 
+static char receive_touch[BUFFER_LENGTH];
+void* touch(void *data)
+{
+	int ret, fd;
+
+	fd = open(TOUCH_PATH, O_RDWR);
+	if(fd < 0){
+		perror("Failed to open the device....");
+		return errno;
+	}
+
+	while(1){
+		ret = read(fd, receive_touch, strlen(receive_touch)+1 );
+
+		if(ret < 0){
+			perror("Failed to read the message from the device.");
+			printf("error\n");
+			return errno;
+		}
+		printf("The received message is :[%s]\n", receive_touch);
+		sleep(1);
+	}
+}
+void* button(void *data)
+{
+	int ret, fd;
+
+	fd = open(BUTTON_PATH, O_RDWR);
+	if(fd < 0){
+		perror("Failed to open the device....");
+		return errno;
+	}
+
+	while(1){
+		ret = read(fd, receive_button, strlen(receive_button)+1);
+
+		if(ret < 0){
+			perror("Failed to read the message from the device.");
+			printf("error\n");
+			return errno;
+		}
+		printf("The received message is :[%s]\n", receive_button);
+		sleep(1);
+	}
+}
+
+
+int main(void){
+		int sec, targetdist;
+		int i;
+		int count;
+		int       thr_id;
+		pthread_t p_thread[3];
+		int status;
+		int a = 1;
+		int b = 2;      
+
+		thr_id = pthread_create(&p_thread[0], NULL, (void*)button, (void *)&a);
+		thr_id = pthread_create(&p_thread[1], NULL, (void*)touch, (void *)&b);
+		
+		if(wiringPiSetup() == -1) return 1;
+
+/*		화장실에 가서 앉고 싼다 다 쌌으면 일어나서 간다.
+			1.초음파1 센서가 기다렸다가 사람이 오는 걸 감지 -> 결과 뚜껑 열리고 센서 중지
+			2.사람이 앉아서 터치 센서가 True 감지 -> 초음파2 센서가 작동 -> 카운트 준비
+			3.사람이 똥을 싸기 시작한다. -> 똥을 3번 감지하면 buzer 울리고 모터들 작동, 카운트 초기화
+			4.다 싸고 일어난다. -> 터치 센서가 False 감지 -> 초음파1 센서가 작동
+			5.초음파1 센서가 사람이 멀어짐을 감지 -> 뚜껑이 닫히고 buzer 울림.
+*/
+		while(1) {
+		// Initialization (close cover, initialize values, etc)
+			servo(0);
+
+		// sense human 
+		do{
+			i = ultrasonic(50);
+		}while(i==0);
+		printf("Person comes to the toilet\n");
+
+		// motor open		servo(90);
+
+		// buzer sounds
+		// buzer(1);
+		// touch sensor 
+		
+		if(!strcmp(receive_touch, "detected")) {
+			count = 0;
+			//			초음파 2센서가 작동
+
+		}
+		while(strcmp(receive_touch, "not detected") != 0) {
+/*			if(	초음파 센서가 인식하는 거리가 짧아졌을 때 작동(count추가)		) {
+				// sense poop (count)
+
+				count++;
+			}
+*/
+	// if button pressed(thread) ; water motor, dry motor, count = 0, buzer sounds
+			if(!strcmp(receive_button, "pressed")) {
+//				water motor, dry motor
+					break;
+			}
+			// if count = 3, water motor, dry motor, count initialize to 0
+			if(count == 2) {
+//				water motor, dry motor
+					count = 0;
+			}
+
+		}
+		
+		do {
+			i = ultrasonic(0);
+		}while(i < 50); //멀어졌을 때 parameter ??
+	// person stand up (touch sensor off) ; sense person go far -> lid close, if count remains : flush+buzer
+		servo(0);
+		
+		pthread_join(p_thread[0], (void **) &status); // button		
+		pthread_join(p_thread[1], (void **) &status); // touch
+
+	}
+	return 0;
+} 
